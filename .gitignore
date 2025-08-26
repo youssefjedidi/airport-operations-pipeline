@@ -1,0 +1,19 @@
+# Python virtual environment
+venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Secret environment variables
+.env
+
+# Data files (we don't want to commit large data files)
+data/logs/*.csv
+data/reports/*.png
+
+# IDE / OS specific
+.vscode/
+.idea/
+.DS_Store
