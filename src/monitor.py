@@ -9,11 +9,10 @@ from dotenv import load_dotenv
 from config import AIRPORT_IATA, AIRPORT_NAME, TURNAROUND_THRESHOLD_MINUTES, LOG_FILE_PATH
 
 load_dotenv()
-AVIATION_STACK_API_KEY = os.getenv('AVIATIONSTACK_API_KEY')
+# AVIATION_STACK_API_KEY = os.getenv('AVIATIONSTACK_API_KEY')
 SLACK_WEBHOOK_URL = os.getenv('SLACK_WEBHOOK_URL')
 
-API_BASE_URL = 'http://api.aviationstack.com/v1/flights'
-# API_BASE_URL = 'https://opensky-network.org/api/states/all  '
+# API_BASE_URL = 'http://api.aviationstack.com/v1/flights'
 
 # SECTION 2: FETCHING DATA 
 
@@ -54,10 +53,6 @@ def fetch_opensky_data():
         'lamax': 45.7,  # Maximum latitude for Montreal area
         'lomin': -74.1, # Minimum longitude for Montreal area
         'lomax': -73.5  # Maximum longitude for Montreal area
-    # 'lamin': 51.3,
-    # 'lomin': -0.6,
-    # 'lamax': 51.7,
-    # 'lomax': -0.3,
     }
 
     OPENSKY_API_URL = 'https://opensky-network.org/api/states/all'
@@ -82,56 +77,6 @@ def fetch_opensky_data():
 
 
 # SECTION 3: PROCESSING DATA & LOGGING
-
-# def process_and_log_data(flights):
-#     """
-#     Processes flight data to calculate turnaround times and logs to CSV.
-#     takes the raw flight data, calculates turnaround times , logs everything,
-#     and identifies flights that need an alert based on the threshold.
-#     """
-
-#     if not flights: # A "guard clause": if we got no flights, just stop right away.
-#         print("No flight data to process.")
-#         return []
-    
-#     print("Processing flight data...")
-
-#     all_landed_flights_log = []
-#     flagged_for_alert = []
-
-#     for flight in flights:
-#         if not flight.get('arrival') or not flight.get('arrival').get('actual'):
-#             continue 
-
-#         # convert text timestamp from API into datetime object for TimeKeeper library calculations
-#         arrival_time_str = flight['arrival']['actual']
-#         arrival_time = datetime.fromisoformat(arrival_time_str)
-    
-#         time_on_ground = datetime.now(timezone.utc) - arrival_time
-#         minutes_on_ground = int(time_on_ground.total_seconds() / 60)
-
-#         flight_log_entry = {
-#             'log_timestamp_utc': datetime.now(timezone.utc).isoformat(),
-#             'flight_iata': flight.get('flight', {}).get('iata', 'N/A'),
-#             # 'flight_iata': flight['flight']['iata'],
-#             'airline': flight.get('airline', {}).get('name', 'N/A'),
-#             # 'flight_number': flight.get('flight', {}).get('number', 'N/A'),
-#             'arrival_from' : flight.get('departure', {}).get('iata', 'N/A'),
-#             # 'arrival_time_utc': arrival_time_str,
-#             'arrival_time_utc': arrival_time.isoformat(),
-#             'minutes_on_ground': minutes_on_ground,
-#             # 'airport': AIRPORT_IATA
-#         }
-#         all_landed_flights_log.append(flight_log_entry)
-
-#         if minutes_on_ground > TURNAROUND_THRESHOLD_MINUTES:
-#             flagged_for_alert.append(flight_log_entry)
-    
-#     # Log all landed flights to CSV
-#     _save_logs_to_csv(all_landed_flights_log)
-
-#     print(f"Processed {len(all_landed_flights_log)} landed flights. {len(flagged_for_alert)} flagged for alert.")
-#     return flagged_for_alert
 
 def process_and_log_data(state_vectors):
     """
@@ -187,7 +132,7 @@ def process_and_log_data(state_vectors):
     _save_logs_to_csv(all_grounded_flights_log)
 
     print(f"Processed {len(state_vectors)} aircraft. Found {len(all_grounded_flights_log)} on the ground. {len(flagged_for_alert)} flagged.")
-    # print(f"Processed {len(all_grounded_flights_log)} grounded aircraft. {len(flagged_for_alert)} flagged for alert.")
+
     return flagged_for_alert
 
 def _save_logs_to_csv(log_entries):
@@ -205,11 +150,7 @@ def _save_logs_to_csv(log_entries):
 
     file_exists = os.path.isfile(LOG_FILE_PATH)
 
-
-    # os.makedirs(os.path.dirname(LOG_FILE_PATH), exist_ok=True)
-
     with open(LOG_FILE_PATH, mode='a', newline='', encoding='utf-8') as csvfile:
-        # fieldnames = ['log_timestamp_utc', 'flight_iata', 'airline', 'arrival_from', 'arrival_time_utc', 'minutes_on_ground']
         fieldnames =log_entries[0].keys()
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
@@ -246,7 +187,6 @@ def send_slack_alert(flagged_flights):
             f"\n*- Flight {flight['flight_iata']}* ({flight['airline']})\n"
             f"  - Arrived from: {flight['origin_country']}\n"
             f"  - On ground for: *{flight['minutes_on_ground']} minutes*\n"
-            # f"  - Arrival time (UTC): {flight['arrival_time_utc']}\n"
         )
         message_lines.append(line)
     
@@ -279,37 +219,3 @@ if __name__ == "__main__":
     
     print(f"--- Monitor run finished at {datetime.now()} ---")
     
-    # print(f"--- Starting Airport Operations Monitor at {datetime.now()} ---")
-
-    # raw_flight_data = fetch_flight_data()
-
-    # flights_to_alert = process_and_log_data(raw_flight_data)
-
-    # send_slack_alert(flights_to_alert)
-
-    # print(f"--- Monitor run complete at {datetime.now()} ---\n")
-
-    # # --- TEMPORARY TEST CODE ---
-    # # We are creating fake data to simulate a long turnaround flight
-    # fake_flights = [
-    #     {
-    #         'flight': {'iata': 'AC427'},
-    #         'airline': {'name': 'Air Canada'},
-    #         'departure': {'iata': 'YYZ'},
-    #         'arrival': {
-    #             # Make the arrival time 2 hours ago to guarantee a flagged alert
-    #             'actual': datetime.now(timezone.utc).replace(hour=datetime.now(timezone.utc).hour - 2).isoformat()
-    #         }
-    #     }
-    # ]
-    
-    # # We are skipping the real API call and using our fake data instead
-    # raw_flights = fake_flights
-    # print("Using fake data for testing purposes.")
-    # # --- END OF TEMPORARY TEST CODE ---
-
-    # # The rest of the script runs as normal, using our fake data
-    # flights_to_alert = process_and_log_data(raw_flights)
-    # send_slack_alert(flights_to_alert)
-    
-    # print(f"--- Monitor run finished at {datetime.now()} ---")
