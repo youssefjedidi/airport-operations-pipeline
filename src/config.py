@@ -3,7 +3,7 @@ AIRPORT_IATA = 'YUL'
 AIRPORT_NAME = 'Montréal-Trudeau International Airport'
 
 # Analysis Parameters
-TURNAROUND_THRESHOLD_MINUTES = 60  # Minimum turnaround time in minutes to flag
+TURNAROUND_THRESHOLD_MINUTES = 90  # Minimum turnaround time in minutes to flag
 
 # File Paths for Data Storage
 LOG_FILE_PATH = 'data/logs/turnaround_log.csv'
