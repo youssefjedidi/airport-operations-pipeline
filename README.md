@@ -62,7 +62,7 @@ This project was built with a focus on clean code, separation of concerns, and r
 1.  **Clone the repository:**
 
     ```bash
-    git clone [https://github.com/youssefjedidi/airport-operations-pipeline]
+    git clone https://github.com/youssefjedidi/airport-operations-pipeline
     cd airport-operations-monitor
     ```
 
