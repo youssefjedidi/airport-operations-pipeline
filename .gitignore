@@ -8,6 +8,7 @@ __pycache__/
 
 # Secret environment variables
 .env
+cron.log
 
 # Data files (we don't want to commit large data files)
 data/logs/*.csv
