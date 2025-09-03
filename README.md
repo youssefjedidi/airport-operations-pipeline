@@ -47,7 +47,43 @@ This project was built with a focus on clean code, separation of concerns, and r
   - `src/reporter.py`: The offline data analysis and visualization tool.
   - `src/config.py`: A centralized configuration file for easy changes to parameters like airport coordinates and thresholds.
   - `data/`: Contains the output logs and generated PNG reports.
+---
 
+## Architecture & Deployment: A Live 24/7 Pipeline
+
+This project is not just a collection of local scripts; it is a fully deployed, autonomous data pipeline operating 24/7 in a cloud environment. The architecture was designed for reliability and hands-free operation, demonstrating skills in cloud infrastructure, Linux, and process automation.
+
+The operational flow is as follows:
+
+```
++---------------------+      +-------------------------------------------+      +--------------------------------+
+|  Cron Scheduler     | ---> |  Bash Script (run_monitor.sh/run_reporter.sh) | ---> |  Python Virtual Environment    |
+| (Triggers on schedule)|      |  (Sets up environment, handles logging)   |      |  (Manages dependencies)        |
++---------------------+      +-------------------------------------------+      +--------------------------------+
+                                                                                           |
+                                                                                           v
++------------------------------------------------------------------------------------------+
+|  Python Script (monitor.py / reporter.py)                                                |
+|  (Executes core logic: API calls, data processing, visualization)                        |
++------------------------------------------------------------------------------------------+
+                                     |
+                                     v
++------------------------------------------------------------------------------------------+
+|  Actions & Artifacts (Slack alerts, turnaround_log.csv, analysis.png)                    |
++------------------------------------------------------------------------------------------+
+```
+
+### Key Components:
+
+*   **Cloud Host:** The entire application is deployed on a **Google Cloud Platform (GCP)** virtual machine. It runs on an `e2-micro` instance, which is part of GCP's "Always Free" tier, demonstrating cost-effective resource management.
+*   **Operating System:** The server runs a stable version of **Debian Linux**, a standard environment for professional backend services.
+*   **Automation Engine:** Automation is handled by **cron**, the native Linux job scheduler. Two distinct schedules are configured:
+    *   The `monitor.py` script runs at a high frequency (e.g., every 15 minutes) to ensure near real-time data collection.
+    *   The `reporter.py` script runs once daily to perform analysis and generate the summary visualization.
+*   **Reliability & Execution:** Instead of being called directly by cron, each Python script is wrapped in a robust **bash script**. This is a best practice that:
+    *   Ensures a consistent and reliable execution environment (`PATH`).
+    *   Automatically activates the correct Python virtual environment to manage dependencies.
+    *   Redirects all output (both `stdout` and `stderr`) to a dedicated log file (`cron.log`, `reporter.log`) for easy debugging and health monitoring.
 ---
 
 ## Setup and Usage
