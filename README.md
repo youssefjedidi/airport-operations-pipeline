@@ -63,7 +63,7 @@ This project was built with a focus on clean code, separation of concerns, and r
 
     ```bash
     git clone https://github.com/youssefjedidi/airport-operations-pipeline
-    cd airport-operations-monitor
+    cd airport-operations-pipeline
     ```
 
 2.  **Create a virtual environment and activate it:**
