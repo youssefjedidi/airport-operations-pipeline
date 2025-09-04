@@ -3,6 +3,7 @@
 import os
 import requests
 import csv
+import json
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 
@@ -11,7 +12,8 @@ from config import AIRPORT_IATA, AIRPORT_NAME, TURNAROUND_THRESHOLD_MINUTES, LOG
 load_dotenv()
 # AVIATION_STACK_API_KEY = os.getenv('AVIATIONSTACK_API_KEY')
 SLACK_WEBHOOK_URL = os.getenv('SLACK_WEBHOOK_URL')
-
+STATE_FILE = 'flight_tracker.json'
+ 
 # API_BASE_URL = 'http://api.aviationstack.com/v1/flights'
 
 # SECTION 2: FETCHING DATA 
@@ -77,24 +79,50 @@ def fetch_opensky_data():
 
 
 # SECTION 3: PROCESSING DATA & LOGGING
+def load_state():
+    """Loads the flight tracking data from a JSON file."""
+    try:
+        with open(STATE_FILE, 'r') as f:
+            state_data = json.load(f)
+            # Convert string timestamps back to datetime objects
+            for callsign, data in state_data.items():
+                data['first_seen_utc'] = datetime.fromisoformat(data['first_seen_utc'])
+            return state_data
+    except FileNotFoundError:
+        return {} # No state file found, start fresh
+
+def save_state(state_data):
+    """Saves the flight tracking data to a JSON file."""
+    # Convert datetime objects to strings for JSON serialization
+    serializable_data = {}
+    for callsign, data in state_data.items():
+        serializable_data[callsign] = {
+            'first_seen_utc': data['first_seen_utc'].isoformat()
+        }
+    with open(STATE_FILE, 'w') as f:
+        json.dump(serializable_data, f, indent=4)
 
 def process_and_log_data(state_vectors):
     """
-    Processes OpenSky state vector data to identify aircraft on the ground
+    Processes OpenSky state vector data to identify aircraft on the ground,
+    calculates true time on ground using a persistent state file,
     and logs relevant information to a CSV file.
-    Identifies aircraft that have been on the ground too long based on the threshold.
     """
-
-    if not state_vectors: # A "guard clause": if we got no state vectors, just stop right away.
+    if not state_vectors:
         print("No state vector data to process.")
         return []
-    
+
     print("Processing OpenSky state vector data...")
 
+    # Load the memory of planes we are already tracking
+    state_tracker = load_state()
+    
+    current_time_utc = datetime.now(timezone.utc)
     all_grounded_flights_log = []
     flagged_for_alert = []
-
-    # current_time_utc = datetime.now(timezone.utc)
+    
+    # Keep track of planes seen in this specific API call
+    current_live_callsigns = set()
 
     for state in state_vectors:
         # State vector indices based on OpenSky API documentation
@@ -104,35 +132,59 @@ def process_and_log_data(state_vectors):
         # 12: sensors, 13: geo_altitude, 14: squawk, 15: spi, 16: position_source
 
         # We only care about aircraft that are on the ground.
-        if state[8] is True:
+        if state[8] is True:  # state[8] is 'on_ground'
             callsign = state[1].strip() if state[1] else 'N/A'
+            if callsign == 'N/A':
+                continue # Skip entries without a proper callsign
 
-            # last_contact is a Unix timestamp (seconds since 1970). We must convert it.
-            last_contact_time = datetime.fromtimestamp(state[4], tz=timezone.utc)
+            current_live_callsigns.add(callsign)
 
-            time_on_ground = datetime.now(timezone.utc) - last_contact_time
-            minutes_on_ground = int(time_on_ground.total_seconds() / 60)
+            # --- STATEFUL LOGIC START ---
+            if callsign not in state_tracker:
+                # NEW PLANE DETECTED: Record its landing time.
+                state_tracker[callsign] = {
+                    'first_seen_utc': current_time_utc
+                }
+                true_minutes_on_ground = 0
+            else:
+                # EXISTING PLANE: Calculate total time since first detection.
+                first_seen_time = state_tracker[callsign]['first_seen_utc']
+                duration = current_time_utc - first_seen_time
+                true_minutes_on_ground = int(duration.total_seconds() / 60)
+            # --- STATEFUL LOGIC END ---
 
+            # Log entry creation
             flight_log_entry = {
-                'log_timestamp_utc': datetime.now(timezone.utc).isoformat(),
+                'log_timestamp_utc': current_time_utc.isoformat(),
                 'flight_iata': callsign,
-                'airline': "Unknown", # OpenSky doesn't provide airline name directly
-                # 'arrival_from': "Unknown", # Or arrival airport
+                'airline': "Unknown",
                 'origin_country': state[2] if state[2] else 'N/A',
-                'last_contact_time_utc': last_contact_time.isoformat(),
-                'minutes_on_ground': minutes_on_ground,
-                # 'airport': AIRPORT_IATA
+                'last_contact_time_utc': datetime.fromtimestamp(state[4], tz=timezone.utc).isoformat(),
+                'minutes_on_ground': true_minutes_on_ground # Use the correct calculation here
             }
             all_grounded_flights_log.append(flight_log_entry)
 
-            if minutes_on_ground > TURNAROUND_THRESHOLD_MINUTES:
-                flagged_for_alert.append(flight_log_entry)
-            
-    # Log all grounded flights to CSV
+            # Check threshold for alerts
+            if true_minutes_on_ground > TURNAROUND_THRESHOLD_MINUTES:
+                # Optional: prevent sending duplicate alerts every run
+                if not state_tracker[callsign].get('alert_sent', False):
+                    flagged_for_alert.append(flight_log_entry)
+                    state_tracker[callsign]['alert_sent'] = True # Mark alert as sent
+
+    # --- CLEANUP LOGIC ---
+    # Remove planes from tracker that have departed (are no longer seen on ground)
+    departed_planes = set(state_tracker.keys()) - current_live_callsigns
+    for callsign in departed_planes:
+        print(f"Removing departed flight {callsign} from tracker.")
+        del state_tracker[callsign]
+
+    # Save updated state back to file for next run
+    save_state(state_tracker)
+
+    # Log all currently grounded flights to CSV
     _save_logs_to_csv(all_grounded_flights_log)
 
     print(f"Processed {len(state_vectors)} aircraft. Found {len(all_grounded_flights_log)} on the ground. {len(flagged_for_alert)} flagged.")
-
     return flagged_for_alert
 
 def _save_logs_to_csv(log_entries):
